@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cashflow-Scout — Immobilien nach Cashflow filtern</title>
+    <meta name="description" content="ImmoScout24-Angebote nach positivem Cashflow durchsuchen, bewerten und vergleichen." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%A0%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__zeile">
+        <div class="marke">
+          <span class="marke__logo">CF</span>
+          <div>
+            <h1>Cashflow-Scout</h1>
+            <p id="modusZeile" class="marke__unter">wird geladen …</p>
+          </div>
+        </div>
+
+        <div class="suchleiste">
+          <label class="feld feld--ort">
+            <span>Region</span>
+            <input id="ort" list="staedteListe" value="Leipzig" autocomplete="off" placeholder="Stadt eingeben" />
+            <datalist id="staedteListe"></datalist>
+          </label>
+          <label class="feld feld--klein">
+            <span>Radius</span>
+            <div class="feld__mitEinheit">
+              <input id="radius" type="number" min="1" max="50" step="1" value="15" />
+              <em>km</em>
+            </div>
+          </label>
+          <label class="feld">
+            <span>Objektart</span>
+            <select id="objektart">
+              <option value="ApartmentBuy">Eigentumswohnung</option>
+              <option value="HouseBuy">Haus (Kauf)</option>
+              <option value="Investment">Anlageobjekt / MFH</option>
+              <option value="ApartmentRent">Mietwohnung (Vergleich)</option>
+            </select>
+          </label>
+          <button id="suchen" class="btn btn--primaer" type="button">Angebote laden</button>
+          <button id="apiOeffnen" class="btn btn--geist" type="button" title="API-Zugangsdaten">API</button>
+          <button id="reglerToggle" class="btn btn--geist" type="button" aria-expanded="true" aria-controls="regler" title="Einstellungen ein- oder ausblenden">Regler ausblenden</button>
+        </div>
+      </div>
+
+      <div class="regler" id="regler">
+        <div class="regler__gruppe">
+          <div class="regler__titel">Finanzierung</div>
+          <div class="regler__felder">
+            <label class="schieber">
+              <span>Sollzins <b id="zinsWert">3,60 %</b></span>
+              <input id="zinssatz" type="range" min="0.5" max="8" step="0.05" value="3.6" />
+            </label>
+            <label class="schieber">
+              <span>Anfangstilgung <b id="tilgungWert">2,00 %</b></span>
+              <input id="tilgung" type="range" min="0.5" max="6" step="0.1" value="2" />
+            </label>
+            <label class="schieber">
+              <span>Beleihung <b id="beleihungWert">100 %</b></span>
+              <input id="finanzierungsgrad" type="range" min="50" max="100" step="1" value="100" />
+            </label>
+            <label class="schalter">
+              <input id="nkMitfinanzieren" type="checkbox" />
+              <span>Kaufnebenkosten mitfinanzieren <em>(110 %)</em></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="regler__gruppe">
+          <div class="regler__titel">Ziel</div>
+          <div class="regler__felder">
+            <label class="schieber">
+              <span>Mindest-Cashflow <b id="zielWert">+100 €/Monat</b></span>
+              <input id="zielCashflow" type="range" min="-500" max="1500" step="25" value="100" />
+            </label>
+            <label class="schalter">
+              <input id="nurZiel" type="checkbox" checked />
+              <span>Nur Angebote über dem Ziel</span>
+            </label>
+            <label class="schalter">
+              <input id="mietbasisPotenzial" type="checkbox" />
+              <span>Mit Potenzialmiete rechnen</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="regler__gruppe">
+          <div class="regler__titel">Bewirtschaftung &amp; Kosten</div>
+          <div class="regler__felder regler__felder--kompakt">
+            <label class="feld feld--mini">
+              <span>Verwaltung €/Monat</span>
+              <input id="verwaltung" type="number" min="0" step="5" value="25" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Instandhaltung €/m²·Jahr</span>
+              <input id="instandhaltung" type="number" min="0" step="1" value="12" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Mietausfall %</span>
+              <input id="mietausfall" type="number" min="0" max="20" step="0.5" value="3" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Notar/Grundbuch %</span>
+              <input id="notar" type="number" min="0" max="5" step="0.1" value="2" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Courtage %</span>
+              <input id="courtage" type="number" min="0" max="10" step="0.01" placeholder="lt. Angebot" title="Leer lassen: Courtage wird aus dem Angebot übernommen." />
+            </label>
+            <label class="feld feld--mini">
+              <span>Grunderwerbsteuer %</span>
+              <input id="grest" type="number" min="0" max="10" step="0.1" placeholder="lt. Bundesland" title="Leer lassen: Satz wird aus der Postleitzahl abgeleitet." />
+            </label>
+          </div>
+        </div>
+
+        <div class="regler__gruppe">
+          <div class="regler__titel">Steuer &amp; Prognose</div>
+          <div class="regler__felder regler__felder--kompakt">
+            <label class="schalter schalter--voll">
+              <input id="steuerAn" type="checkbox" />
+              <span>Steuereffekt einrechnen</span>
+            </label>
+            <label class="feld feld--mini">
+              <span>Grenzsteuersatz %</span>
+              <input id="steuersatz" type="number" min="0" max="50" step="1" value="42" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Gebäudeanteil %</span>
+              <input id="gebaeudeanteil" type="number" min="0" max="100" step="5" value="75" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Zinsbindung Jahre</span>
+              <input id="zinsbindung" type="number" min="1" max="30" step="1" value="10" />
+            </label>
+            <label class="feld feld--mini">
+              <span>Mietsteigerung %/Jahr</span>
+              <input id="mietsteigerung" type="number" min="0" max="10" step="0.1" value="1.5" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="spalte spalte--liste" aria-label="Angebote">
+        <div class="listenkopf">
+          <div class="listenkopf__zeile">
+            <strong id="trefferZahl">–</strong>
+            <label class="feld feld--mini feld--inline">
+              <span>Sortierung</span>
+              <select id="sortierung">
+                <option value="cashflow">Cashflow absteigend</option>
+                <option value="score">Bewertung</option>
+                <option value="rendite">Bruttorendite</option>
+                <option value="faktor">Kaufpreisfaktor</option>
+                <option value="preis">Kaufpreis aufsteigend</option>
+                <option value="qm">Preis je m²</option>
+              </select>
+            </label>
+          </div>
+          <div id="statistik" class="statistik"></div>
+        </div>
+        <div id="liste" class="liste" role="list"></div>
+      </section>
+
+      <section class="spalte spalte--detail" aria-label="Analyse">
+        <div id="detail" class="detail"></div>
+      </section>
+    </main>
+
+    <dialog id="apiDialog" class="dialog">
+      <form method="dialog" class="dialog__inhalt">
+        <h2>ImmoScout24 API-Zugang</h2>
+        <p class="dialog__hinweis">
+          Der Zugang wird über die <a href="https://api.immobilienscout24.de" target="_blank" rel="noreferrer">ImmoScout24 API</a>
+          beantragt. Für die Suche genügt der Consumer Key/Secret (Zwei-Bein-OAuth). Die Daten bleiben auf diesem Rechner.
+        </p>
+        <label class="feld">
+          <span>Consumer Key (Client-ID)</span>
+          <input id="apiKey" type="text" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="feld">
+          <span>Consumer Secret</span>
+          <input id="apiSecret" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+        <details class="dialog__details">
+          <summary>Drei-Bein-OAuth (optional)</summary>
+          <label class="feld"><span>Access Token</span><input id="apiToken" type="text" autocomplete="off" /></label>
+          <label class="feld"><span>Token Secret</span><input id="apiTokenSecret" type="password" autocomplete="off" /></label>
+        </details>
+        <label class="feld">
+          <span>Umgebung</span>
+          <select id="apiUmgebung">
+            <option value="live">Live</option>
+            <option value="sandbox">Sandbox</option>
+          </select>
+        </label>
+        <label class="schalter">
+          <input id="apiSpeichern" type="checkbox" checked />
+          <span>In <code>.env.local</code> speichern (nicht im Git)</span>
+        </label>
+        <p id="apiStatus" class="dialog__status"></p>
+        <div class="dialog__aktionen">
+          <button value="abbrechen" class="btn btn--geist" type="submit">Schließen</button>
+          <button id="apiSpeichernBtn" class="btn btn--primaer" type="button">Speichern &amp; testen</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>
