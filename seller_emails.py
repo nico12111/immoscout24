@@ -23,6 +23,10 @@ from tqdm import tqdm
 SELLER_URL = "https://www.amazon.de/sp?seller={seller_id}"
 GERMAN_COUNTRIES = {"DE", "AT", "CH", "LI"}
 GERMAN_TLDS = (".de", ".at", ".ch")
+# Reihenfolge der Abarbeitung: erst diese Länder (in dieser Reihenfolge), dann alle anderen.
+DEFAULT_PRIORITY = ("DE,AT,CH,LI,NL,BE,LU,FR,IT,ES,PT,PL,CZ,SK,HU,SI,HR,RO,BG,GR,"
+                    "SE,DK,FI,NO,IE,GB,EE,LV,LT,MT,CY")
+BLOCKED_RESOURCES = {"image", "media", "font"}
 
 COL_NAME = "Name"
 COL_SELLER_ID = "Seller Id"
@@ -145,7 +149,9 @@ def apply_filters(sellers, args):
             seen.add(s["seller_id"])
             unique.append(s)
 
-    unique.sort(key=lambda s: s["ratings"], reverse=True)
+    priority = [c.strip().upper() for c in args.priority.split(",") if c.strip()]
+    rank = {c: i for i, c in enumerate(priority)}
+    unique.sort(key=lambda s: (rank.get(s["country"], len(rank)), -s["ratings"]))
     if args.limit:
         unique = unique[: args.limit]
     return unique
@@ -215,6 +221,14 @@ def looks_blocked(url, title, text):
         return True
     lower = text.lower()
     return any(marker in lower for marker in BLOCK_MARKERS)
+
+
+def new_page(context):
+    page = context.new_page()
+    # Bilder, Videos und Schriften nicht laden: schneller und weniger Last.
+    page.route("**/*", lambda route: route.abort()
+               if route.request.resource_type in BLOCKED_RESOURCES else route.continue_())
+    return page
 
 
 def fetch_seller_text(page, seller_id, timeout_ms):
@@ -332,6 +346,8 @@ def parse_args(argv=None):
     p.add_argument("--fba", choices=["yes", "no"], help="Nur Verkäufer mit/ohne FBA")
     p.add_argument("--category", help="Teilstring in 'Selling primarily: Category'")
     p.add_argument("--limit", type=int, help="Maximal so viele Verkäufer verarbeiten")
+    p.add_argument("--priority", default=DEFAULT_PRIORITY,
+                   help="Diese Länder zuerst abarbeiten, in dieser Reihenfolge (Standard: DE,AT,CH, dann Europa)")
     p.add_argument("--resume", action="store_true", help="Fortsetzen, bereits verarbeitete Seller IDs überspringen")
     p.add_argument("--out-dir", default=".", help="Ausgabeordner (Standard: aktueller Ordner)")
     p.add_argument("--headful", action="store_true", help="Browserfenster anzeigen")
@@ -361,7 +377,7 @@ def run(args):
         store = Store(args.out_dir, resume=True)
         store.open()
         context = browser.new_context(locale="de-DE", extra_http_headers={"Accept-Language": "de-DE,de;q=0.9"})
-        page = context.new_page()
+        page = new_page(context)
         bar = tqdm(todo, unit="Verkäufer")
         try:
             for n, seller in enumerate(bar):

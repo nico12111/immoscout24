@@ -33,7 +33,8 @@ python seller_emails.py KeepaExport.xlsx --countries DE --min-ratings 1000 --lim
 | `--min-ratings 500` | mindestens so viele „Rating Count: Lifetime“ |
 | `--fba yes\|no` | nur mit / ohne FBA |
 | `--category "Computer"` | Teilstring in „Selling primarily: Category“ |
-| `--limit 500` | höchstens so viele Verkäufer (nach Bewertungen absteigend sortiert) |
+| `--limit 500` | höchstens so viele Verkäufer |
+| `--priority DE,AT,CH,…` | diese Länder zuerst, in dieser Reihenfolge (Standard: DE, AT, CH, dann Europa, dann alle anderen); innerhalb eines Landes nach Bewertungen absteigend |
 | `--resume` | bereits verarbeitete Seller IDs (`progress.json`) überspringen |
 | `--out-dir ordner` | Ausgabeordner (Standard: aktueller Ordner) |
 | `--headful` | Browserfenster sichtbar machen |
@@ -52,7 +53,7 @@ E-Mail-Domain auf .de/.at/.ch endet. Alles andere: **Englisch**.
 
 ## Verhalten bei Sperren
 
-Ein Seitenaufruf nach dem anderen, 6–12 Sekunden zufällige Pause dazwischen.
+Bilder, Videos und Schriften werden nicht geladen. Ein Seitenaufruf nach dem anderen, 6–12 Sekunden zufällige Pause dazwischen.
 Liefert Amazon eine CAPTCHA-, Robot-Check- oder Fehlerseite (HTTP 429/5xx), wird
 **nicht** versucht, das zu umgehen: Der Fortschritt wird gespeichert, das Programm
 beendet sich (Exit-Code 2), und du setzt später mit `--resume` fort. Nach 3 Fehlern
