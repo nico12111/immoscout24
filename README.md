@@ -51,13 +51,26 @@ python seller_emails.py KeepaExport.xlsx --countries DE --min-ratings 1000 --lim
 Land der Geschäftsadresse DE/AT/CH/LI ist, sonst (beides unbekannt) wenn die
 E-Mail-Domain auf .de/.at/.ch endet. Alles andere: **Englisch**.
 
+## Was das Tool selbst erledigt
+
+- **Fehler bei einem Verkäufer** (Timeout, Seite lädt nicht, Browser abgestürzt): Browser
+  neu starten, 30 Sekunden warten, noch einmal versuchen. Klappt es wieder nicht, wird
+  der Verkäufer übersprungen (`Fehler: …` in `log.csv`) und es geht weiter.
+- **Keine E-Mail im Profil**: wird als `keine E-Mail` vermerkt, weiter zum nächsten.
+- **Internet weg**: wartet, bis die Verbindung wieder da ist, und macht dann an derselben
+  Stelle weiter.
+- **Selbstkontrolle**: Kommen 30 Verkäufer in Folge ohne E-Mail (`--max-empty`), stimmt
+  vermutlich etwas mit der Seite nicht. Das Tool hält an, und diese 30 werden beim
+  nächsten `--resume` erneut geprüft. Ebenso nach 10 übersprungenen Verkäufern in Folge
+  (`--max-errors`).
+
 ## Verhalten bei Sperren
 
-Bilder, Videos und Schriften werden nicht geladen. Ein Seitenaufruf nach dem anderen, 6–12 Sekunden zufällige Pause dazwischen.
-Liefert Amazon eine CAPTCHA-, Robot-Check- oder Fehlerseite (HTTP 429/5xx), wird
-**nicht** versucht, das zu umgehen: Der Fortschritt wird gespeichert, das Programm
-beendet sich (Exit-Code 2), und du setzt später mit `--resume` fort. Nach 3 Fehlern
-in Folge (z. B. Timeouts) wird ebenfalls angehalten (Exit-Code 3).
+Ein Seitenaufruf nach dem anderen, 6–12 Sekunden zufällige Pause dazwischen.
+Bilder, Videos und Schriften werden nicht geladen. Liefert Amazon eine CAPTCHA-,
+Robot-Check- oder Fehlerseite (HTTP 429/5xx), wird **nicht** versucht, das zu umgehen:
+Der Fortschritt wird gespeichert, das Programm beendet sich (Exit-Code 2), und du setzt
+später mit `--resume` fort.
 
 Durchsatz: ca. 9 s pro Verkäufer → rund 400 pro Stunde, wenn Amazon nicht sperrt.
 Alle ~84.700 Verkäufer wären reine Laufzeit von gut 9 Tagen; realistisch kommen

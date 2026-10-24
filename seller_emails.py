@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import socket
 import sys
 import time
 from pathlib import Path
@@ -321,6 +322,10 @@ class Store:
         self.done.add(seller_id)
         self.save_progress()
 
+    def unmark_done(self, seller_ids):
+        self.done.difference_update(seller_ids)
+        self.save_progress()
+
     def save_progress(self):
         tmp = self.progress_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps({"done": sorted(self.done)}), encoding="utf-8")
@@ -353,9 +358,77 @@ def parse_args(argv=None):
     p.add_argument("--headful", action="store_true", help="Browserfenster anzeigen")
     p.add_argument("--browser-path", help="Pfad zu einer eigenen Chromium-Installation (optional)")
     p.add_argument("--timeout", type=int, default=30, help="Seiten-Timeout in Sekunden (Standard: 30)")
-    p.add_argument("--max-errors", type=int, default=3,
-                   help="Nach so vielen Fehlern in Folge abbrechen (Standard: 3)")
+    p.add_argument("--max-errors", type=int, default=10,
+                   help="Nach so vielen übersprungenen Verkäufern in Folge (trotz Internet) abbrechen (Standard: 10)")
+    p.add_argument("--max-empty", type=int, default=30,
+                   help="Nach so vielen Verkäufern ohne E-Mail in Folge anhalten, weil dann vermutlich "
+                        "etwas mit der Seite nicht stimmt (Standard: 30)")
     return p.parse_args(argv)
+
+
+def internet_ok():
+    try:
+        socket.create_connection(("1.1.1.1", 443), timeout=5).close()
+        return True
+    except OSError:
+        return False
+
+
+def wait_for_internet():
+    if internet_ok():
+        return
+    tqdm.write("\nKeine Internetverbindung – warte, bis sie wieder da ist …")
+    while not internet_ok():
+        time.sleep(60)
+    tqdm.write("Internet wieder da, weiter geht's.")
+
+
+class Browser:
+    """Chromium mit einer Seite; wird bei Absturz/Hänger neu gestartet."""
+
+    def __init__(self, pw, args):
+        self.pw, self.args = pw, args
+        self.browser = None
+        self.start()
+
+    def start(self):
+        self.close()
+        self.browser = self.pw.chromium.launch(headless=not self.args.headful,
+                                               executable_path=self.args.browser_path)
+        context = self.browser.new_context(locale="de-DE",
+                                           extra_http_headers={"Accept-Language": "de-DE,de;q=0.9"})
+        self.page = new_page(context)
+
+    def close(self):
+        if self.browser:
+            try:
+                self.browser.close()
+            except Exception:
+                pass
+            self.browser = None
+
+
+def fetch_with_retry(browser, seller, args):
+    """Seite holen; bei Fehler (Timeout, Absturz, Internet weg) Browser neu starten und
+    noch einmal versuchen. Sperren (Blocked) werden nicht wiederholt."""
+    attempts = 0
+    while True:
+        try:
+            return fetch_seller_text(browser.page, seller["seller_id"], args.timeout * 1000)
+        except Blocked:
+            raise
+        except Exception as e:
+            offline = not internet_ok()
+            if offline:
+                wait_for_internet()  # Ausfall des Internets zählt nicht als Versuch
+            else:
+                attempts += 1
+                if attempts >= 2:
+                    raise
+                tqdm.write(f"Fehler bei {seller['seller_id']} ({type(e).__name__}), "
+                           "starte Browser neu und versuche es noch einmal …")
+                time.sleep(30)
+            browser.start()
 
 
 def run(args):
@@ -371,13 +444,12 @@ def run(args):
 
     exit_code = 0
     consecutive_errors = 0
+    empty_streak = []  # Seller IDs der letzten Verkäufer ohne E-Mail in Folge
     stats = {"ok": 0, "keine E-Mail": 0, "Fehler": 0, "neue E-Mails": 0}
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=not args.headful, executable_path=args.browser_path)
+        browser = Browser(pw, args)
         store = Store(args.out_dir, resume=True)
         store.open()
-        context = browser.new_context(locale="de-DE", extra_http_headers={"Accept-Language": "de-DE,de;q=0.9"})
-        page = new_page(context)
         bar = tqdm(todo, unit="Verkäufer")
         try:
             for n, seller in enumerate(bar):
@@ -385,7 +457,7 @@ def run(args):
                     time.sleep(random.uniform(6, 12))
                 bar.set_postfix_str(seller["seller_id"])
                 try:
-                    status, text = fetch_seller_text(page, seller["seller_id"], args.timeout * 1000)
+                    status, text = fetch_with_retry(browser, seller, args)
                 except Blocked as e:
                     store.log(seller, "blockiert")
                     tqdm.write(f"\nAmazon blockiert ({e}) bei {seller['seller_id']}. "
@@ -393,25 +465,26 @@ def run(args):
                     exit_code = 2
                     break
                 except Exception as e:
+                    # Zweimal fehlgeschlagen, Internet ist da: Verkäufer überspringen.
                     consecutive_errors += 1
                     stats["Fehler"] += 1
                     store.log(seller, f"Fehler: {type(e).__name__}")
                     store.mark_done(seller["seller_id"])
+                    tqdm.write(f"Übersprungen: {seller['seller_id']} ({type(e).__name__})")
                     if consecutive_errors >= args.max_errors:
-                        tqdm.write(f"\n{consecutive_errors} Fehler in Folge (zuletzt: {e}). "
+                        tqdm.write(f"\n{consecutive_errors} Verkäufer in Folge übersprungen (zuletzt: {e}). "
                                    "Fortschritt gespeichert – später mit --resume fortsetzen.")
                         exit_code = 3
                         break
                     continue
 
+                consecutive_errors = 0
                 if status == 404:
-                    consecutive_errors += 1
                     stats["Fehler"] += 1
                     store.log(seller, "Fehler: HTTP 404")
                     store.mark_done(seller["seller_id"])
                     continue
 
-                consecutive_errors = 0
                 emails = extract_emails(text)
                 address_country = extract_address_country(text)
                 languages = []
@@ -424,6 +497,17 @@ def run(args):
                 stats[status_text] += 1
                 store.log(seller, status_text, emails, languages, address_country)
                 store.mark_done(seller["seller_id"])
+
+                # Selbstkontrolle: Kommen lange keine E-Mails mehr, stimmt vermutlich etwas
+                # mit der Seite nicht. Diese Verkäufer beim nächsten --resume erneut prüfen.
+                empty_streak = [] if emails else empty_streak + [seller["seller_id"]]
+                if len(empty_streak) >= args.max_empty:
+                    store.unmark_done(empty_streak)
+                    tqdm.write(f"\n{len(empty_streak)} Verkäufer in Folge ohne E-Mail – vermutlich hat sich "
+                               "die Amazon-Seite geändert oder Amazon liefert leere Seiten. Angehalten; diese "
+                               "Verkäufer werden beim nächsten --resume erneut geprüft.")
+                    exit_code = 4
+                    break
         except KeyboardInterrupt:
             tqdm.write("\nAbgebrochen. Fortschritt gespeichert – später mit --resume fortsetzen.")
             exit_code = 130
@@ -431,6 +515,8 @@ def run(args):
             bar.close()
             store.close()
             browser.close()
+            if exit_code == 0:
+                print("Alle Verkäufer abgearbeitet.")
 
     print(f"Fertig: {stats['ok']} mit E-Mail, {stats['keine E-Mail']} ohne E-Mail, "
           f"{stats['Fehler']} Fehler, {stats['neue E-Mails']} neue Adressen.")
