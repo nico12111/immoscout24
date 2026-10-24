@@ -35,9 +35,8 @@ REQUIRED_COLUMNS = [COL_NAME, COL_SELLER_ID, COL_COUNTRY, COL_RATINGS, COL_FBA, 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,24}")
 FILE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico", "css", "js", "avif"}
 IGNORED_DOMAINS = ("amazon.", "amazonaws.", "media-amazon.", "ssl-images-amazon.")
-# Datenschutz-Adressen (datenschutz@, privacy@, dsb@ …) nicht übernehmen.
-PRIVACY_LOCAL_RE = re.compile(
-    r"datenschutz|privacy|dsgvo|gdpr|data[._-]?protection|^(ds|dsb|dpo)$")
+# Datenschutz-Adressen (datenschutz@, datenschutzbeauftragter@ …) nicht übernehmen.
+PRIVACY_LOCAL_RE = re.compile(r"datenschutz")
 
 BLOCK_MARKERS = (
     "geben sie die unten angezeigten zeichen ein",
