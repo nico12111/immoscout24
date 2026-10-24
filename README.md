@@ -1,142 +1,70 @@
-# Cashflow-Scout
+# Seller-E-Mails aus Keepa-Export
 
-Vergleichsoberfläche für ImmoScout24-Angebote aus Sicht eines Kapitalanlegers:
-links die Angebote zum Durchscrollen mit dem Cashflow direkt an der Karte,
-rechts die Analyse mit Pluspunkten, Minuspunkten und den Zahlen dahinter.
-Zinssatz, Tilgung, Beleihungsgrad und Ziel-Cashflow sind Regler in der Kopfzeile
-— jede Änderung rechnet alle Angebote sofort neu durch.
+Liest für Verkäufer aus einem Keepa-Export („KeepaExport-…-TopSellerList.xlsx“) die
+E-Mail-Adressen aus dem öffentlichen Amazon-Verkäuferprofil
+(`https://www.amazon.de/sp?seller=<Seller Id>`, Blöcke „Info zum Verkäufer“ und
+„Impressum & Info zum Verkäufer“) und speichert sie nach Sprache getrennt.
 
-![Oberfläche](docs/screenshot.png)
-
-## Schnellstart
+## Installation
 
 ```bash
-npm start          # startet auf http://localhost:3000
-npm test           # 32 Tests für Finanzmathematik, Analyse und API-Normalisierung
+cd <repo-ordner>
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+playwright install chromium
 ```
 
-Ohne API-Zugangsdaten startet die Anwendung im **Demo-Modus** mit realistischen
-Beispielangeboten. Die gesamte Oberfläche und alle Berechnungen funktionieren
-dort identisch — nur die Daten sind erfunden.
-
-## API-Zugang einrichten
-
-Die Suche greift auf die [ImmoScout24 REST-API](https://api.immobilienscout24.de)
-zu. Zugang gibt es nur als Content-Partner; für die Suche genügt
-Zwei-Bein-OAuth mit Consumer Key und Secret.
-
-Entweder über den Knopf **API** oben rechts eintragen (schreibt auf Wunsch nach
-`.env.local`, die von `.gitignore` erfasst ist), oder manuell:
+## Aufruf
 
 ```bash
-cp .env.example .env.local
-# IS24_CLIENT_KEY und IS24_CLIENT_SECRET eintragen
+python seller_emails.py KeepaExport.xlsx --countries DE --min-ratings 1000 --limit 300
 ```
 
-Der Dialog testet die Zugangsdaten sofort mit einer Minimalsuche und meldet
-zurück, ob die Verbindung steht.
+Nach einem Abbruch (Robot-Check, Strg+C, Netzwerkfehler) einfach mit `--resume`
+und denselben Filtern weitermachen:
 
-## Was gerechnet wird
-
-Grundlage ist die klassische Annuitätenrechnung für vermietete Wohnimmobilien:
-
-| Größe | Rechnung |
-| --- | --- |
-| Kaufnebenkosten | Grunderwerbsteuer (aus der PLZ je Bundesland) + Notar/Grundbuch + Courtage (aus dem Exposé, sonst Fallback) |
-| Darlehen | Beleihungsgrad × Kaufpreis, auf Wunsch inklusive Nebenkosten (110-%-Finanzierung) |
-| Annuität | (Sollzins + Anfangstilgung) × Darlehen |
-| Bewirtschaftung | Verwaltung + Instandhaltungsrücklage (€/m²·Jahr) + Mietausfallwagnis + nicht umlagefähiger Hausgeldanteil |
-| **Cashflow** | Kaltmiete − Bewirtschaftung − Annuität |
-| Steuereffekt (optional) | (Miete − Bewirtschaftung − Zins − AfA) × Grenzsteuersatz |
-
-Zusätzlich ausgewiesen: Kaufpreisfaktor, Brutto- und Nettomietrendite,
-Eigenkapitalrendite, Kapitaldienstdeckung (DSCR), Restschuld am Ende der
-Zinsbindung, der **Break-even-Zins** (ab wann der Cashflow kippt) und der
-**maximale Kaufpreis**, bei dem das Cashflow-Ziel noch aufgeht — letzteres als
-Verhandlungsgrundlage.
-
-### Mieten
-
-Bei vermieteten Objekten wird die Ist-Miete aus dem Exposé verwendet. Fehlt sie,
-schätzt die Anwendung sie aus einem regionalen Mietniveau (Stadtwert, sonst
-PLZ-Gebiet) mit Zu- und Abschlägen für Wohnfläche, Baujahr und Zustand. Solche
-Angebote sind in der Liste als *Miete geschätzt* markiert.
-
-Die Marktmiete wird **nicht** auf mindestens die Ist-Miete angehoben. Liegt die
-Bestandsmiete über dem Marktniveau, erscheint das als Warnung — beim
-Mieterwechsel fällt der Cashflow dann.
-
-> Die Mietwerte sind Orientierungsgrößen für den Vergleich, kein Mietspiegel.
-> Vor einer Kaufentscheidung gehören sie gegen den örtlichen Mietspiegel geprüft.
-
-## Was analysiert wird
-
-Die Bewertung (0–100) kombiniert Textregeln auf dem Exposé mit den
-strukturierten Feldern und den errechneten Kennzahlen:
-
-- **Risiken aus dem Text:** Sanierungs- und Renovierungsbedarf, Erbbaurecht,
-  Nießbrauch und Wohnrecht, Sonderumlagen und Instandhaltungsstau, Schadstoffe
-  und Feuchteschäden, veraltete Heizungen, Souterrainlage, Lärm,
-  Zwangsversteigerung, Teileigentum.
-- **Pluspunkte:** Kernsanierung, Neubau, moderne Energieversorgung,
-  Provisionsfreiheit, laufende Vermietung, Staffel- oder Indexmiete, Stellplatz,
-  Aufzug, gute Anbindung.
-- **Aus den Feldern:** Baujahr, Energieeffizienzklasse (notfalls aus dem
-  Kennwert abgeleitet), fehlender Energieausweis.
-- **Aus den Kennzahlen:** Ziel-Cashflow erreicht, Kaufpreisfaktor,
-  Bruttorendite gegen das Zinsniveau, Zinspuffer, Mietsteigerungspotenzial,
-  Höhe der Kaufnebenkosten.
-
-Jeder Punkt nennt die Konsequenz, nicht nur das Stichwort — inklusive grober
-Renovierungsbudgets nach €/m².
-
-Die Skala endet bewusst bei 3 und 97: eine Textanalyse kann ein Objekt weder
-freisprechen noch endgültig verurteilen. Sie ersetzt keine Besichtigung, keine
-Teilungserklärung und kein Protokoll der Eigentümerversammlung.
-
-## Bedienung
-
-- **Regler oben** wirken sofort auf alle Angebote — Zins, Tilgung, Beleihung,
-  Ziel-Cashflow, Bewirtschaftungskosten, Steuer.
-- **„Nur Angebote über dem Ziel"** blendet alles aus, was dein Ziel verfehlt.
-  Bleibt nichts übrig, zeigt die Anwendung, wie weit das beste Objekt entfernt
-  ist und bei welchem Zins es aufginge.
-- **„Mit Potenzialmiete rechnen"** legt statt der Ist-Miete die geschätzte
-  Marktmiete zugrunde.
-- **Pfeiltasten oder `j`/`k`** blättern durch die Liste.
-- Einstellungen bleiben im Browser gespeichert.
-
-## Aufbau
-
-```
-server/       HTTP-Server ohne externe Abhängigkeiten
-  index.js      Routen und Auslieferung
-  is24Client.js Suche und Exposé-Abruf
-  oauth1.js     OAuth-1.0a-Signierung (HMAC-SHA1)
-  normalize.js  IS24-JSON → einheitliches Angebotsmodell
-  demoData.js   Beispielangebote für den Betrieb ohne Zugang
-shared/       läuft in Node und im Browser
-  finance.js    Annuität, Cashflow, Kennzahlen, Prognose
-  analysis.js   Regelwerk für Pro-/Contra-Punkte und Score
-  regions.js    Bundesländer, Grunderwerbsteuer, Mietniveau, Städte
-public/       Oberfläche (Vanilla-JS-Module, kein Build-Schritt)
-test/         Tests über Node's eingebauten Test-Runner
+```bash
+python seller_emails.py KeepaExport.xlsx --countries DE --min-ratings 1000 --limit 300 --resume
 ```
 
-Es gibt bewusst keine Laufzeit-Abhängigkeiten und keinen Build-Schritt:
-`node server/index.js` genügt.
+| Option | Bedeutung |
+|---|---|
+| `--countries DE,AT,CH` | nur diese Ländercodes (Spalte „Country“) |
+| `--min-ratings 500` | mindestens so viele „Rating Count: Lifetime“ |
+| `--fba yes\|no` | nur mit / ohne FBA |
+| `--category "Computer"` | Teilstring in „Selling primarily: Category“ |
+| `--limit 500` | höchstens so viele Verkäufer (nach Bewertungen absteigend sortiert) |
+| `--resume` | bereits verarbeitete Seller IDs (`progress.json`) überspringen |
+| `--out-dir ordner` | Ausgabeordner (Standard: aktueller Ordner) |
+| `--headful` | Browserfenster sichtbar machen |
 
-Die Suche lädt die Ergebnisliste und reichert bis zu sechs Exposés parallel an,
-damit Beschreibungstexte, Baujahr, Energieausweis und Hausgeld für die Analyse
-zur Verfügung stehen. Schlägt ein Exposé-Abruf fehl, bleibt das Angebot mit den
-Listendaten erhalten.
+## Ausgabe
 
-## Grenzen
+- `emails_de.csv`, `emails_en.csv`: eine Spalte `email`, über alle Verkäufer dedupliziert
+- `log.csv`: Seller Id, Name, Land (Keepa / Geschäftsadresse), E-Mails, Sprache, Status
+  (`ok`, `keine E-Mail`, `blockiert`, `Fehler: …`)
+- `progress.json`: bereits verarbeitete Seller IDs
 
-- Die Search-API steht nur Content-Partnern offen, nicht für Datenabzüge.
-- Mietschätzungen, Renovierungsbudgets und der Score sind Orientierung, keine
-  Bewertung im Sinne der ImmoWertV.
-- Steuerlich wird vereinfacht gerechnet (lineare AfA, ein Grenzsteuersatz, keine
-  Verlustverrechnungsgrenzen, kein Solidaritätszuschlag, keine Kirchensteuer).
-- Erbbauzins, Sonderumlagen und Modernisierungsumlagen werden erkannt und
-  benannt, aber nicht automatisch in den Cashflow eingerechnet.
+**Deutsch**, wenn Country (Keepa) DE/AT/CH/LI ist, sonst (Country leer/„-“) wenn das
+Land der Geschäftsadresse DE/AT/CH/LI ist, sonst (beides unbekannt) wenn die
+E-Mail-Domain auf .de/.at/.ch endet. Alles andere: **Englisch**.
+
+## Verhalten bei Sperren
+
+Ein Seitenaufruf nach dem anderen, 6–12 Sekunden zufällige Pause dazwischen.
+Liefert Amazon eine CAPTCHA-, Robot-Check- oder Fehlerseite (HTTP 429/5xx), wird
+**nicht** versucht, das zu umgehen: Der Fortschritt wird gespeichert, das Programm
+beendet sich (Exit-Code 2), und du setzt später mit `--resume` fort. Nach 3 Fehlern
+in Folge (z. B. Timeouts) wird ebenfalls angehalten (Exit-Code 3).
+
+Durchsatz: ca. 9 s pro Verkäufer → rund 400 pro Stunde, wenn Amazon nicht sperrt.
+Alle ~84.700 Verkäufer wären reine Laufzeit von gut 9 Tagen; realistisch kommen
+Sperren dazu. Deshalb vorher filtern.
+
+## Rechtlicher Hinweis
+
+Eine Impressums-Adresse ist **keine Einwilligung** in Werbe-E-Mails. Werbung per
+E-Mail ohne vorherige Einwilligung ist nach § 7 Abs. 2 UWG auch gegenüber
+Unternehmen unzulässig (abmahnfähig), dazu kommt die DSGVO, sobald Adressen
+personenbezogen sind (z. B. vorname.nachname@…). Automatisierter Abruf verstößt
+außerdem gegen die Nutzungsbedingungen von Amazon.

@@ -1,13 +1,8 @@
-node_modules/
-.env
-.env.local
-*.log
-.DS_Store
-cache/
-
-# seller_emails Ausgaben
-tools/seller_emails/*.csv
-tools/seller_emails/progress.json
-tools/seller_emails/*.xlsx
-tools/seller_emails/.venv/
+# Ausgaben und Eingabedateien
+*.csv
+progress.json
+progress.json.tmp
+*.xlsx
+.venv/
 __pycache__/
+.DS_Store
