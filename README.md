@@ -41,6 +41,7 @@ python seller_emails.py KeepaExport.xlsx --countries DE --min-ratings 1000 --lim
 ## Ausgabe
 
 - `emails_de.csv`, `emails_en.csv`: eine Spalte `email`, über alle Verkäufer dedupliziert
+- Datenschutz-Adressen (`datenschutz@`, `privacy@`, `dsb@`, `dpo@` …) werden nicht übernommen
 - `log.csv`: Seller Id, Name, Land (Keepa / Geschäftsadresse), E-Mails, Sprache, Status
   (`ok`, `keine E-Mail`, `blockiert`, `Fehler: …`)
 - `progress.json`: bereits verarbeitete Seller IDs
