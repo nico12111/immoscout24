@@ -17,6 +17,7 @@ import html
 import re
 import sys
 import threading
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -79,11 +80,23 @@ def read_firms(openvc_path, newfunds_path=None):
 
 def fetch(url, timeout):
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "en,de;q=0.8"})
+    deadline = time.monotonic() + timeout * 2
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         ctype = resp.headers.get("Content-Type", "")
         if "html" not in ctype and "text" not in ctype:
             return resp.geturl(), ""
-        raw = resp.read(2_000_000)
+        # In Stücken lesen und nach spätestens 2 × timeout abbrechen, damit eine Seite,
+        # die nur tröpfchenweise sendet, nicht ewig hängt.
+        chunks, size = [], 0
+        while size < 2_000_000:
+            if time.monotonic() > deadline:
+                raise TimeoutError("Seite zu langsam")
+            chunk = resp.read1(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        raw = b"".join(chunks)
         charset = resp.headers.get_content_charset() or "utf-8"
         return resp.geturl(), raw.decode(charset, errors="replace")
 
