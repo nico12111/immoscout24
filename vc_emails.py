@@ -27,10 +27,13 @@ from openpyxl import load_workbook
 from tqdm import tqdm
 
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,24}")
+# Längen begrenzt ({1,64} usw.): Ohne Begrenzung wächst die Rechenzeit bei langen
+# Buchstabenketten ohne @ quadratisch, und große Seiten frieren das Programm ein.
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9\-]{1,63}(?:\.[A-Za-z0-9\-]{1,63}){0,4}\.[A-Za-z]{2,24}")
 # einfache Verschleierungen: name [at] domain [dot] com
 OBFUSCATED_RE = re.compile(
-    r"([A-Za-z0-9._%+\-]+)\s*[\[\(\{]\s*(?:at|@)\s*[\]\)\}]\s*([A-Za-z0-9\-]+)\s*[\[\(\{]\s*(?:dot|\.)\s*[\]\)\}]\s*([A-Za-z]{2,24})",
+    r"([A-Za-z0-9._%+\-]{1,64})\s{0,3}[\[\(\{]\s{0,3}(?:at|@)\s{0,3}[\]\)\}]\s{0,3}([A-Za-z0-9\-]{1,63})"
+    r"\s{0,3}[\[\(\{]\s{0,3}(?:dot|\.)\s{0,3}[\]\)\}]\s{0,3}([A-Za-z]{2,24})",
     re.I)
 LINK_RE = re.compile(r"""href\s*=\s*["']([^"'#]+)["']""", re.I)
 CONTACT_HINTS = ("contact", "kontakt", "impressum", "imprint", "legal", "about", "team", "pitch", "apply")
@@ -88,7 +91,7 @@ def fetch(url, timeout):
         # In Stücken lesen und nach spätestens 2 × timeout abbrechen, damit eine Seite,
         # die nur tröpfchenweise sendet, nicht ewig hängt.
         chunks, size = [], 0
-        while size < 2_000_000:
+        while size < 1_000_000:
             if time.monotonic() > deadline:
                 raise TimeoutError("Seite zu langsam")
             chunk = resp.read1(65536)
