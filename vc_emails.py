@@ -172,6 +172,7 @@ def main(argv=None):
             done = {r["firm"] for r in csv.DictReader(f)}
     todo = [f for f in firms if f["firm"] not in done]
     print(f"{len(firms)} Fonds, {len(done)} bereits erledigt, {len(todo)} offen.")
+    print("Läuft – bitte nicht ins Fenster klicken. Fertig ist es erst, wenn unten 'Fertig.' steht.")
 
     new = not out.exists()
     results = queue.Queue()
@@ -197,8 +198,14 @@ def main(argv=None):
 
         pending, active = list(todo), {}
         bar = tqdm(total=len(todo), unit="Fonds")
+        last_status = time.monotonic()
         try:
             while pending or active:
+                if time.monotonic() - last_status >= 15:
+                    # Lebenszeichen, damit man sieht, dass das Skript noch arbeitet
+                    waiting = ", ".join(f["firm"] for f, _ in list(active.values())[:3])
+                    tqdm.write(f"… läuft noch, {len(active)} Websites in Arbeit (z. B. {waiting})")
+                    last_status = time.monotonic()
                 while pending and len(active) < args.workers:
                     firm = pending.pop(0)
                     active[id(firm)] = (firm, time.monotonic())
@@ -214,6 +221,7 @@ def main(argv=None):
                     if now - started > args.max_seconds:
                         del active[key]
                         write(firm, [], "Fehler: hängt")
+                        tqdm.write(f"Aufgegeben (hängt): {firm['firm']} – {firm['website']}")
         except KeyboardInterrupt:
             bar.close()
             print("\nAbgebrochen – gespeichert. Gleicher Befehl setzt fort.")
