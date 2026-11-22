@@ -83,3 +83,20 @@ E-Mail ohne vorherige Einwilligung ist nach § 7 Abs. 2 UWG auch gegenüber
 Unternehmen unzulässig (abmahnfähig), dazu kommt die DSGVO, sobald Adressen
 personenbezogen sind (z. B. vorname.nachname@…). Automatisierter Abruf verstößt
 außerdem gegen die Nutzungsbedingungen von Amazon.
+
+---
+
+# VC-Fonds: E-Mails von Websites (`vc_emails.py`)
+
+Besucht die Website jedes Fonds aus dem OpenVC-Export (plus Kontakt-, Impressum-,
+About- und Team-Unterseiten) und sammelt die E-Mail-Adressen.
+
+```bash
+python vc_emails.py "Oct_2025_-_OpenVC.xlsx" --new-funds "New_VC_Funds_2026.xlsx"
+```
+
+- Fonds aus „New VC Funds“ haben keine Website-Spalte. Sie werden über den Namen mit
+  der OpenVC-Liste abgeglichen; ohne Treffer steht `keine Website` im Ergebnis.
+- 8 Websites parallel (`--workers`), Abbruch mit Strg+C, derselbe Befehl setzt fort.
+- Ergebnis: `vc_emails.csv` (Fonds, Website, E-Mails, Status) und
+  `vc_emails_nur_emails.csv` (eine Spalte, jede Adresse einmal).
