@@ -16,10 +16,10 @@ import csv
 import html
 import re
 import sys
+import queue
 import threading
 import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -160,6 +160,8 @@ def main(argv=None):
     p.add_argument("--out", default="vc_emails.csv", help="Ausgabe (Standard: vc_emails.csv)")
     p.add_argument("--workers", type=int, default=8, help="Websites parallel (Standard: 8)")
     p.add_argument("--timeout", type=int, default=15, help="Timeout pro Seite in Sekunden (Standard: 15)")
+    p.add_argument("--max-seconds", type=int, default=120,
+                   help="Fonds aufgeben, wenn er insgesamt länger braucht (Standard: 120)")
     args = p.parse_args(argv)
 
     firms = read_firms(args.openvc, args.new_funds)
@@ -172,23 +174,51 @@ def main(argv=None):
     print(f"{len(firms)} Fonds, {len(done)} bereits erledigt, {len(todo)} offen.")
 
     new = not out.exists()
-    lock = threading.Lock()
-    with out.open("a", newline="", encoding="utf-8") as fh, ThreadPoolExecutor(args.workers) as pool:
+    results = queue.Queue()
+
+    def worker(firm):
+        try:
+            emails, status = scan(firm, args.timeout)
+        except Exception as e:
+            emails, status = [], f"Fehler: {type(e).__name__}"
+        results.put((id(firm), emails, status))
+
+    # Eigene Daemon-Threads statt ThreadPoolExecutor: Ein Fonds, der länger als
+    # --max-seconds hängt (egal wo), wird aufgegeben und blockiert keinen Platz.
+    with out.open("a", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=OUT_FIELDS)
         if new:
             writer.writeheader()
-        futures = {pool.submit(scan, f, args.timeout): f for f in todo}
+
+        def write(firm, emails, status):
+            writer.writerow({**firm, "emails": ";".join(emails), "status": status})
+            fh.flush()
+            bar.update(1)
+
+        pending, active = list(todo), {}
+        bar = tqdm(total=len(todo), unit="Fonds")
         try:
-            for fut in tqdm(as_completed(futures), total=len(futures), unit="Fonds"):
-                firm = futures[fut]
-                emails, status = fut.result()
-                with lock:
-                    writer.writerow({**firm, "emails": ";".join(emails), "status": status})
-                    fh.flush()
+            while pending or active:
+                while pending and len(active) < args.workers:
+                    firm = pending.pop(0)
+                    active[id(firm)] = (firm, time.monotonic())
+                    threading.Thread(target=worker, args=(firm,), daemon=True).start()
+                try:
+                    key, emails, status = results.get(timeout=1)
+                    if key in active:  # Ergebnis eines aufgegebenen Fonds ignorieren
+                        write(active.pop(key)[0], emails, status)
+                except queue.Empty:
+                    pass
+                now = time.monotonic()
+                for key, (firm, started) in list(active.items()):
+                    if now - started > args.max_seconds:
+                        del active[key]
+                        write(firm, [], "Fehler: hängt")
         except KeyboardInterrupt:
+            bar.close()
             print("\nAbgebrochen – gespeichert. Gleicher Befehl setzt fort.")
-            pool.shutdown(cancel_futures=True)
             return 130
+        bar.close()
 
     # Zusätzlich: eine Spalte, jede Adresse nur einmal
     seen = []
